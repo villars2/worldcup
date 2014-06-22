@@ -68,4 +68,30 @@ only<-function(vec) {
 ## and firstonly and secondonly are indicators for whether that team
 ## is always in first or second place (could not be because of goal difference, etc)
 summary<-ddply(simulation,c("score1","score2"),summarize,firstmd=Mode(first),firstonly=only(first),secondmd=Mode(second),secondonly=only(second))
-summary
+
+### Making it look nice... 
+summary$score1[summary$score1==-1]<-"L"
+summary$score1[summary$score1==0]<-"T"
+summary$score1[summary$score1==1]<-"W"
+summary$score2[summary$score2==-1]<-"L"
+summary$score2[summary$score2==0]<-"T"
+summary$score2[summary$score2==1]<-"W"
+
+summary$score1<-paste(subset(master,group=="A" & team==1)$teamname,
+                      summary$score1,
+                      subset(master,group=="A" & team==4)$teamname,
+                      sep=" ")
+summary$score2<-paste(subset(master,group=="A" & team==2)$teamname,
+                      summary$score2,
+                      subset(master,group=="A" & team==3)$teamname,
+                      sep=" ")
+
+masterfirst<-master
+names(masterfirst)<-c("group","firstmd","firstmdname")
+mastersecond<-master
+names(mastersecond)<-c("group","secondmd","secondmdname")
+
+summary$group<-"A"
+summary<-merge(merge(summary,masterfirst),mastersecond)
+
+summary$res1<-paste()
