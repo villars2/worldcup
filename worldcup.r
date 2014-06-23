@@ -7,12 +7,8 @@ library(plyr)
 
 ### Set directory and load in scores 
 cd<-"C:/Users/Sergio/Documents/worldcup"
-groupA<-read.csv(paste(cd,"groupA.csv", sep="/"))
-groupA$group<-"A"
 
-### Load in team names by group/team id
-master<-read.csv(paste(cd,"master.csv",sep="/"))
-
+### Put functions here
 ### Function to get top 2 teams (in order) in each group given scores
 gothru<-function(grp) {
   grp$teamingame<-rep(c(1,2),6)
@@ -33,9 +29,6 @@ gothru<-function(grp) {
   thru<-rankings$team[1:2]
   return(thru)
 }
-# gothru(groupA)
-
-# To get result for 2 outcomes: sapply(list(groupA,groupA2),gothru)
 
 ### Function to replace NA scores by simulated scores, and get top 2 teams
 simulate <- function (scores) {
@@ -43,16 +36,6 @@ simulate <- function (scores) {
   grp$goals[is.na(grp$goals)]<-scores
   return(gothru(grp))
 }
-
-### Simulate given all scores with between 0 and 5 goals. 
-group<-groupA
-simulation<-expand.grid(g1=c(0:5),g2=c(0:5),g3=c(0:5),g4=c(0:5))
-results<-apply(simulation,1,simulate)
-simulation$first<-results[1,]
-simulation$second<-results[2,]
-
-simulation$score1<-sign(simulation$g1-simulation$g2)
-simulation$score2<-sign(simulation$g3-simulation$g4)
 
 ### Compute qualifying teams given all possible scores
 Mode <- function(vec) {
@@ -63,35 +46,83 @@ only<-function(vec) {
   return(min(vec==Mode(vec)))
 }
 
-### Summary, aggregated by result (W/D/L) in each remaining game
-## firstmd and secondmd are the team that comes first or second most often,
-## and firstonly and secondonly are indicators for whether that team
-## is always in first or second place (could not be because of goal difference, etc)
-summary<-ddply(simulation,c("score1","score2"),summarize,firstmd=Mode(first),firstonly=only(first),secondmd=Mode(second),secondonly=only(second))
 
-### Making it look nice... 
-summary$score1[summary$score1==-1]<-"L"
-summary$score1[summary$score1==0]<-"T"
-summary$score1[summary$score1==1]<-"W"
-summary$score2[summary$score2==-1]<-"L"
-summary$score2[summary$score2==0]<-"T"
-summary$score2[summary$score2==1]<-"W"
 
-summary$score1<-paste(subset(master,group=="A" & team==1)$teamname,
-                      summary$score1,
-                      subset(master,group=="A" & team==4)$teamname,
-                      sep=" ")
-summary$score2<-paste(subset(master,group=="A" & team==2)$teamname,
-                      summary$score2,
-                      subset(master,group=="A" & team==3)$teamname,
-                      sep=" ")
+getsummary <- function (gr) {
+  group<<-subset(read.csv(paste(cd,"groups.csv", sep="/")),group==gr)
+  
+  ### Load in team names by group/team id
+  master<-subset(read.csv(paste(cd,"master.csv",sep="/")),group==gr,select=c(team,teamname))
+  
 
-masterfirst<-master
-names(masterfirst)<-c("group","firstmd","firstmdname")
-mastersecond<-master
-names(mastersecond)<-c("group","secondmd","secondmdname")
+  # gothru(groupA)
+  
+  # To get result for 2 outcomes: sapply(list(groupA,groupA2),gothru)
+  
 
-summary$group<-"A"
-summary<-merge(merge(summary,masterfirst),mastersecond)
+  
+  ### Simulate given all scores with between 0 and 5 goals. 
+  #group<-group
+  simulation<-expand.grid(g1=c(0:5),g2=c(0:5),g3=c(0:5),g4=c(0:5))
+  results<-apply(simulation,1,simulate)
+  simulation$first<-results[1,]
+  simulation$second<-results[2,]
+  
+  masterfirst<-master
+  names(masterfirst)<-c("first","firstname")
+  mastersecond<-master
+  names(mastersecond)<-c("second","secondname")
+  
+  simulation$score1<-sign(simulation$g1-simulation$g2)
+  simulation$score2<-sign(simulation$g3-simulation$g4)
+  
+  simulation<-merge(merge(simulation,masterfirst),mastersecond)
+  simul<<-simulation
 
-summary$res1<-paste()
+  
+  ### Summary, aggregated by result (W/D/L) in each remaining game
+  ## firstmd and secondmd are the team that comes first or second most often,
+  ## and firstonly and secondonly are indicators for whether that team
+  ## is always in first or second place (could not be because of goal difference, etc)
+  summary<-ddply(simulation,c("score1","score2"),summarize,firstmd=Mode(first),firstonly=only(first),secondmd=Mode(second),secondonly=only(second))
+  
+  ### Making it look nice... 
+  summary$score1[summary$score1==-1]<-"L"
+  summary$score1[summary$score1==0]<-"T"
+  summary$score1[summary$score1==1]<-"W"
+  summary$score2[summary$score2==-1]<-"L"
+  summary$score2[summary$score2==0]<-"T"
+  summary$score2[summary$score2==1]<-"W"
+  
+  summary$score1<-paste(subset(master,team==1)$teamname,
+                        summary$score1,
+                        subset(master,team==4)$teamname,
+                        sep=" ")
+  summary$score2<-paste(subset(master,team==2)$teamname,
+                        summary$score2,
+                        subset(master,team==3)$teamname,
+                        sep=" ")
+  
+  masterfirst<-master
+  names(masterfirst)<-c("firstmd","firstmdname")
+  mastersecond<-master
+  names(mastersecond)<-c("secondmd","secondmdname")
+  
+  summary$group<-gr
+  summary<-merge(merge(summary,masterfirst),mastersecond)
+  
+  #summary$res1<-paste()
+  return(summary)
+}
+
+possible <- function (outcomes) {
+  possoutcomes<-subset(simul,score1==outcomes[1] & score2==outcomes[2],select=c(g1,g2,g3,g4,first,second,firstname,secondname))
+  possoutcomes<-possoutcomes[order(possoutcomes$first,possoutcomes$second),]
+  
+  return(possoutcomes)
+}
+
+### Examples:
+getsummary("A")
+getsummary("G")
+possible(c(1,-1))
