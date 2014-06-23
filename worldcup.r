@@ -1,6 +1,7 @@
 library(reshape)
 library(reshape2)
 library(plyr)
+library(rjson)
 
 # groupA<-data.frame(game=c(1,1,2,2,3,3,4,4,5,5,6,6),team=c(1,2,3,4,1,3,2,4,1,4,2,3))
 # groupA$goals<-c(rpois(8,1),rep(NA,4))
@@ -137,6 +138,6 @@ possible(c(1,1))
 
 # Pulling data from world cup API. Need to figure out 
 # how to put NAs into games that aren't finished yet
-json_file<-"http://worldcup.sfg.io/matches/"
-json_data<-fromJSON(json_file)
+json_file<-"http://worldcup.sfg.io/matches"
+json_data<-fromJSON(file=json_file)
 game1<-subset(do.call("rbind.fill",lapply(json_data[[1]],as.data.frame)),country!="<NA>",select=c(country,code,goals))
