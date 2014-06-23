@@ -6,7 +6,8 @@ library(plyr)
 # groupA$goals<-c(rpois(8,1),rep(NA,4))
 
 ### Set directory and load in scores 
-cd<-"C:/Users/Sergio/Documents/worldcup"
+#cd<-"C:/Users/Sergio/Documents/GitHub/worldcup"
+cd<-"C:/Users/sv2307/Documents/GitHub/worldcup"
 
 ### Put functions here
 ### Function to get top 2 teams (in order) in each group given scores
@@ -133,3 +134,9 @@ possible <- function (outcomes) {
 #getsummary("A")
 getsummary("G")
 possible(c(1,1))
+
+# Pulling data from world cup API. Need to figure out 
+# how to put NAs into games that aren't finished yet
+json_file<-"http://worldcup.sfg.io/matches/"
+json_data<-fromJSON(json_file)
+game1<-subset(do.call("rbind.fill",lapply(json_data[[1]],as.data.frame)),country!="<NA>",select=c(country,code,goals))
