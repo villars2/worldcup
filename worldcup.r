@@ -52,7 +52,7 @@ getsummary <- function (gr) {
   group<<-subset(read.csv(paste(cd,"groups.csv", sep="/")),group==gr)
   
   ### Load in team names by group/team id
-  master<-subset(read.csv(paste(cd,"master.csv",sep="/")),group==gr,select=c(team,teamname))
+  master<<-subset(read.csv(paste(cd,"master.csv",sep="/")),group==gr,select=c(team,teamname))
   
 
   # gothru(groupA)
@@ -63,7 +63,7 @@ getsummary <- function (gr) {
   
   ### Simulate given all scores with between 0 and 5 goals. 
   #group<-group
-  simulation<-expand.grid(g1=c(0:5),g2=c(0:5),g3=c(0:5),g4=c(0:5))
+  simulation<-expand.grid(g1=c(0:5),g4=c(0:5),g2=c(0:5),g3=c(0:5))
   results<-apply(simulation,1,simulate)
   simulation$first<-results[1,]
   simulation$second<-results[2,]
@@ -73,8 +73,8 @@ getsummary <- function (gr) {
   mastersecond<-master
   names(mastersecond)<-c("second","secondname")
   
-  simulation$score1<-sign(simulation$g1-simulation$g2)
-  simulation$score2<-sign(simulation$g3-simulation$g4)
+  simulation$score1<-sign(simulation$g1-simulation$g4)
+  simulation$score2<-sign(simulation$g2-simulation$g3)
   
   simulation<-merge(merge(simulation,masterfirst),mastersecond)
   simul<<-simulation
@@ -116,13 +116,20 @@ getsummary <- function (gr) {
 }
 
 possible <- function (outcomes) {
-  possoutcomes<-subset(simul,score1==outcomes[1] & score2==outcomes[2],select=c(g1,g2,g3,g4,first,second,firstname,secondname))
+  possoutcomes<-subset(simul,score1==outcomes[1] & score2==outcomes[2],select=c(g1,g4,g2,g3,first,second,firstname,secondname))
   possoutcomes<-possoutcomes[order(possoutcomes$first,possoutcomes$second),]
-  
+  names(possoutcomes)<-c(paste("g",c(as.character(subset(master,team==1)$teamname),
+                                   as.character(subset(master,team==4)$teamname),
+                                   as.character(subset(master,team==2)$teamname),
+                                   as.character(subset(master,team==3)$teamname)),sep=""),
+                         "first",
+                         "second",
+                         "firstname",
+                         "secondname")
   return(possoutcomes)
 }
 
 ### Examples:
-getsummary("A")
+#getsummary("A")
 getsummary("G")
-possible(c(1,-1))
+possible(c(1,1))
