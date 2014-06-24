@@ -110,6 +110,9 @@ getsummary <- function (gr) {
   
   ### Simulate given all scores with between 0 and 5 goals. 
   #group<-group
+  # Here we could automatically make the simulation grid using, but would get big (1.7E6) rows
+  # gamesleft<-nrow(subset(group,is.na(goals)))
+  # expand.grid(as.data.frame(matrix(rep(0:5,gamesleft),ncol=gamesleft)))
   simulation<-expand.grid(g1=c(0:5),g2=c(0:5),g3=c(0:5),g4=c(0:5))
   names(simulation)<-as.character(paste("g",subset(group,is.na(goals))$country,sep=""))
   results<-apply(simulation,1,simulate)
