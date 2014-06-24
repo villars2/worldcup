@@ -2,6 +2,7 @@ library(reshape)
 library(reshape2)
 library(plyr)
 library(rjson)
+library(ggplot2)
 
 # groupA<-data.frame(game=c(1,1,2,2,3,3,4,4,5,5,6,6),team=c(1,2,3,4,1,3,2,4,1,4,2,3))
 # groupA$goals<-c(rpois(8,1),rep(NA,4))
@@ -170,9 +171,29 @@ possible <- function (outcomes) {
   return(possoutcomes)
 }
 
+### Plot outcomes given scores:
+plotpossible <- function(df) {
+  df$score1<-df[,1]-df[,2]
+  df$score2<-df[,3]-df[,4]
+  g1<-paste(names(df)[1],names(df)[2],sep="-")
+  g2<-paste(names(df)[3],names(df)[4],sep="-")
+  df<-subset(df,select=c(first,second,score1,score2))
+  df.l<<-melt(df,id=c("score1","score2"))
+  names(df.l)<-c(g1,g2,"rank","country")  
+  g<-ggplot(df.l,aes(x=jitter(df.l[,1],amount=0.1),y=jitter(df.l[,2],amount=0.1),colour=country))+
+    geom_point(size=2,alpha=0.7)+
+    facet_grid(rank~.)+
+    xlab(g1)+
+    ylab(g2)+
+    theme_bw()
+  return(g)
+}
+
+
 ### Examples:
-groupGames<-buildgroups(3)
+groupGames<-buildgroups(1)
 #getsummary("A")
 getsummary("G")
-possible(c(1,1))
+#possible(c(1,1))
+ggsave(filename=paste(getwd(),"/groupGplot.png",sep=""),plot=plotpossible(simul))
 
