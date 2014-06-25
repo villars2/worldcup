@@ -57,9 +57,40 @@ buildgroups <- function (save=1,filename="groupPull") {
   return(groupGames)
 }
 
-### Function to get top 2 teams (in order) in each group given scores
-gothru<-function(grp) {
-  grp$teamingame<-rep(c(1,2),6)
+### Function to break ties
+buildtiebreak <- function(rnk) {
+  group<-rnk
+  group<-group[order(group$points,group$gd,group$gf,decreasing=TRUE),]
+  group$dup<-duplicated(subset(group,select=-c(country)),fromLast=TRUE)
+  check<-as.numeric(subset(group,dup==TRUE,select=c(points,gd,gf))[1,])
+  group$dups<-apply(as.matrix(subset(group,selec=c(points,gd,gf))),1,function(x) {identical(as.numeric(x),check)})
+  tied<-group$country[group$dups]
+  games<-grp
+  games$tie<-as.factor(games$country) %in% tied
+  
+  #agg<-aggregate(games,)
+  
+  #group$dups<-(subset(group,select=c(points,gd,gf))==as.numeric(subset(group,dup==TRUE,select=c(points,gd,gf))))
+  agg<-aggregate(games$tie,list(games$game),min)
+  names(agg)<-c("game","tiedgames")
+  games<-merge(games,agg)
+  tiedgroup<-subset(games,tiedgames==1,select=c(game,country,fifa_code,goals,group))
+  
+  tiedgroup$teamingame<-rep(c(1,2),length(tiedgroup[,1])/2)
+  tiebreak<-subset(rnk,select=country)
+  tiebreak$brk<-rep(1,4)
+  
+  if (length(tiedgroup[,1])>0) {
+    tiebreak<-buildrankings(tiedgroup)
+    tiebreak$brk<-(1:length(tiedgroup[,1]))
+    tiebreak<-subset(tiebreak,select=c(country,brk))             
+  }
+  return(tiebreak)
+}
+
+### Function to build group rankings
+buildrankings <- function (grp) {
+  grp$teamingame<-rep(c(1,2),length(grp[,1])/2)
   grp.wide<-dcast(grp,game~teamingame,value.var="goals")
   names(grp.wide)<-c("game","g1","g2")
   grp.wide$gd1<-grp.wide$g1-grp.wide$g2
@@ -74,6 +105,29 @@ gothru<-function(grp) {
   
   rankings<-ddply(grp.all,"country",summarize,points=sum(pts,na.rm=TRUE),gd=sum(gd,na.rm=TRUE),gf=sum(goals,na.rm=TRUE))
   rankings<-rankings[order(rankings$points,rankings$gd,rankings$gf,decreasing=TRUE),]
+  return(rankings)
+}
+
+### Function to get top 2 teams (in order) in each group given scores
+gothru<-function(grp) {
+#   grp$teamingame<-rep(c(1,2),6)
+#   grp.wide<-dcast(grp,game~teamingame,value.var="goals")
+#   names(grp.wide)<-c("game","g1","g2")
+#   grp.wide$gd1<-grp.wide$g1-grp.wide$g2
+#   grp.wide$gd2<-grp.wide$g2-grp.wide$g1
+#   grp.wide<-subset(grp.wide,select=c(game,gd1,gd2))
+#   grp.gd<-melt(grp.wide,id=c("game"))
+#   grp.gd$variable<-substring(grp.gd$variable,3,4)
+#   names(grp.gd)<-c("game","teamingame","gd")
+#   
+#   grp.all<-merge(grp,grp.gd)
+#   grp.all$pts<-sign(grp.all$gd)+1+as.numeric(grp.all$gd>0)
+#   
+#   rankings<-ddply(grp.all,"country",summarize,points=sum(pts,na.rm=TRUE),gd=sum(gd,na.rm=TRUE),gf=sum(goals,na.rm=TRUE))
+#   rankings<-rankings[order(rankings$points,rankings$gd,rankings$gf,decreasing=TRUE),]
+  rankings<-buildrankings(grp)
+  rankings<-merge(rankings,buildtiebreak(rankings))
+  rankings<-rankings[order(rankings$points,rankings$gd,rankings$gf,-rankings$brk,decreasing=TRUE),]
   thru<-rankings$country[1:2]
   return(thru)
 }
@@ -111,9 +165,9 @@ getsummary <- function (gr) {
   ### Simulate given all scores with between 0 and 5 goals. 
   #group<-group
   # Here we could automatically make the simulation grid using, but would get big (1.7E6) rows
-  # gamesleft<-nrow(subset(group,is.na(goals)))
-  # expand.grid(as.data.frame(matrix(rep(0:5,gamesleft),ncol=gamesleft)))
-  simulation<-expand.grid(g1=c(0:5),g2=c(0:5),g3=c(0:5),g4=c(0:5))
+  gamesleft<-nrow(subset(group,is.na(goals)))
+  simulation<-expand.grid(as.data.frame(matrix(rep(0:5,gamesleft),ncol=gamesleft)))
+  # simulation<-expand.grid(g1=c(0:5),g2=c(0:5),g3=c(0:5),g4=c(0:5))
   names(simulation)<-as.character(paste("g",subset(group,is.na(goals))$country,sep=""))
   results<-apply(simulation,1,simulate)
   simulation$first<-as.factor(results[1,])
