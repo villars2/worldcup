@@ -2,15 +2,61 @@ library(reshape)
 library(reshape2)
 library(plyr)
 library(rjson)
+library(ggplot2)
 
 # groupA<-data.frame(game=c(1,1,2,2,3,3,4,4,5,5,6,6),team=c(1,2,3,4,1,3,2,4,1,4,2,3))
 # groupA$goals<-c(rpois(8,1),rep(NA,4))
 
 ### Set directory and load in scores 
 #cd<-"C:/Users/Sergio/Documents/GitHub/worldcup"
-cd<-"C:/Users/sv2307/Documents/GitHub/worldcup"
+#cd<-"C:/Users/sv2307/Documents/GitHub/worldcup"
 
-### Put functions here
+##### Put functions here
+### Pulling data from world cup API.
+## Argument=1 is to pull file from API, 2 is to get file and save, 3 is to
+## read file from filename (only body of name, no .csv)
+buildgroups <- function (save=1,filename="groupPull") {
+  if (save==1 || save==2) {
+    json_file<-"http://worldcup.sfg.io/matches"
+    json_data<-fromJSON(file=json_file)
+    
+    pullGame <- function(g_data) {
+      g<-subset(subset(do.call("rbind.fill",lapply(g_data,as.data.frame)),country!="<NA>",select=c(country,code,goals)))
+      g$g_id<-g_data[[1]]
+      if (g_data[[4]]!="completed") {
+        g$goals<-c(NA,NA)
+      }
+      return(g)
+    }
+    
+    groupGames<-do.call("rbind.fill",lapply(lapply(json_data[1:48],pullGame),as.data.frame))
+    names(groupGames)<-c("country","fifa_code","goals","game")
+    
+    teams_file<-"http://worldcup.sfg.io/teams"
+    teams_data<-fromJSON(file=teams_file)
+    teams_data<-lapply(teams_data, function(x) {
+      x[sapply(x, is.null)] <- NA
+      unlist(x)
+    })
+    teamsMaster<-as.data.frame(do.call("rbind", teams_data))
+    teamsMaster$group<-LETTERS[teamsMaster$group_id]
+    teamsMaster<-subset(teamsMaster,select=c(country,fifa_code,group))
+    
+    groupGames<-merge(groupGames,teamsMaster)
+    groupGames<-groupGames[order(groupGames$group,groupGames$game,groupGames$country),]
+  }
+  
+  if (save==2) {
+    write.csv(groupGames,paste(getwd(),"/groupPull.csv",sep=""))
+  }
+  
+  if (save==3) {
+    groupGames<-read.csv(paste(getwd(),"/",filename,".csv", sep=""))
+  }
+  
+  return(groupGames)
+}
+
 ### Function to get top 2 teams (in order) in each group given scores
 gothru<-function(grp) {
   grp$teamingame<-rep(c(1,2),6)
@@ -26,9 +72,9 @@ gothru<-function(grp) {
   grp.all<-merge(grp,grp.gd)
   grp.all$pts<-sign(grp.all$gd)+1+as.numeric(grp.all$gd>0)
   
-  rankings<-ddply(grp.all,"team",summarize,points=sum(pts,na.rm=TRUE),gd=sum(gd,na.rm=TRUE),gf=sum(goals,na.rm=TRUE))
+  rankings<-ddply(grp.all,"country",summarize,points=sum(pts,na.rm=TRUE),gd=sum(gd,na.rm=TRUE),gf=sum(goals,na.rm=TRUE))
   rankings<-rankings[order(rankings$points,rankings$gd,rankings$gf,decreasing=TRUE),]
-  thru<-rankings$team[1:2]
+  thru<-rankings$country[1:2]
   return(thru)
 }
 
@@ -41,20 +87,19 @@ simulate <- function (scores) {
 
 ### Compute qualifying teams given all possible scores
 Mode <- function(vec) {
-  all<-c(1,2,3,4)
+  all<-levels(vec)
   all[which.max(tabulate(match(vec,all)))]
 }
 only<-function(vec) {
   return(min(vec==Mode(vec)))
 }
 
-
-
+### Builds summary of outcomes given scores
 getsummary <- function (gr) {
-  group<<-subset(read.csv(paste(cd,"groups.csv", sep="/")),group==gr)
-  
+  #group<<-subset(read.csv(paste(cd,"groups.csv", sep="/")),group==gr)
+  group<<-subset(groupGames,group==gr)
   ### Load in team names by group/team id
-  master<<-subset(read.csv(paste(cd,"master.csv",sep="/")),group==gr,select=c(team,teamname))
+  #master<<-subset(read.csv(paste(cd,"master.csv",sep="/")),group==gr,select=c(team,teamname))
   
 
   # gothru(groupA)
@@ -65,20 +110,24 @@ getsummary <- function (gr) {
   
   ### Simulate given all scores with between 0 and 5 goals. 
   #group<-group
-  simulation<-expand.grid(g1=c(0:5),g4=c(0:5),g2=c(0:5),g3=c(0:5))
+  # Here we could automatically make the simulation grid using, but would get big (1.7E6) rows
+  # gamesleft<-nrow(subset(group,is.na(goals)))
+  # expand.grid(as.data.frame(matrix(rep(0:5,gamesleft),ncol=gamesleft)))
+  simulation<-expand.grid(g1=c(0:5),g2=c(0:5),g3=c(0:5),g4=c(0:5))
+  names(simulation)<-as.character(paste("g",subset(group,is.na(goals))$country,sep=""))
   results<-apply(simulation,1,simulate)
-  simulation$first<-results[1,]
-  simulation$second<-results[2,]
+  simulation$first<-as.factor(results[1,])
+  simulation$second<-as.factor(results[2,])
   
-  masterfirst<-master
-  names(masterfirst)<-c("first","firstname")
-  mastersecond<-master
-  names(mastersecond)<-c("second","secondname")
+  #masterfirst<-master
+  #names(masterfirst)<-c("first","firstname")
+  #mastersecond<-master
+  #names(mastersecond)<-c("second","secondname")
   
-  simulation$score1<-sign(simulation$g1-simulation$g4)
-  simulation$score2<-sign(simulation$g2-simulation$g3)
+  simulation$score1<-sign(simulation[,1]-simulation[,2])
+  simulation$score2<-sign(simulation[,3]-simulation[,4])
   
-  simulation<-merge(merge(simulation,masterfirst),mastersecond)
+  #simulation<-merge(merge(simulation,masterfirst),mastersecond)
   simul<<-simulation
 
   
@@ -96,51 +145,64 @@ getsummary <- function (gr) {
   summary$score2[summary$score2==0]<-"T"
   summary$score2[summary$score2==1]<-"W"
   
-  summary$score1<-paste(subset(master,team==1)$teamname,
+  remaininggames<-subset(group,is.na(goals))
+  summary$score1<-paste(remaininggames$country[1],
                         summary$score1,
-                        subset(master,team==4)$teamname,
+                        remaininggames$country[2],
                         sep=" ")
-  summary$score2<-paste(subset(master,team==2)$teamname,
+  summary$score2<-paste(remaininggames$country[3],
                         summary$score2,
-                        subset(master,team==3)$teamname,
+                        remaininggames$country[4],
                         sep=" ")
   
-  masterfirst<-master
-  names(masterfirst)<-c("firstmd","firstmdname")
-  mastersecond<-master
-  names(mastersecond)<-c("secondmd","secondmdname")
+  #masterfirst<-master
+  #names(masterfirst)<-c("firstmd","firstmdname")
+  #mastersecond<-master
+  #names(mastersecond)<-c("secondmd","secondmdname")
   
-  summary$group<-gr
-  summary<-merge(merge(summary,masterfirst),mastersecond)
+  #summary$group<-gr
+  #summary<-merge(merge(summary,masterfirst),mastersecond)
   
   #summary$res1<-paste()
   return(summary)
 }
 
+### Possible outcomes given a certain score (for different goal combinations)
 possible <- function (outcomes) {
-  possoutcomes<-subset(simul,score1==outcomes[1] & score2==outcomes[2],select=c(g1,g4,g2,g3,first,second,firstname,secondname))
+  possoutcomes<-subset(simul,score1==outcomes[1] & score2==outcomes[2],select=-c(score1,score2))
   possoutcomes<-possoutcomes[order(possoutcomes$first,possoutcomes$second),]
-  names(possoutcomes)<-c(paste("g",c(as.character(subset(master,team==1)$teamname),
-                                   as.character(subset(master,team==4)$teamname),
-                                   as.character(subset(master,team==2)$teamname),
-                                   as.character(subset(master,team==3)$teamname)),sep=""),
-                         "first",
-                         "second",
-                         "firstname",
-                         "secondname")
   return(possoutcomes)
 }
 
+### Plot outcomes given scores:
+plotpossible <- function(df) {
+  df$score1<-df[,1]-df[,2]
+  df$score2<-df[,3]-df[,4]
+  g1<-paste(names(df)[1],names(df)[2],sep="-")
+  g2<-paste(names(df)[3],names(df)[4],sep="-")
+  df<-subset(df,select=c(first,second,score1,score2))
+  df.l<<-melt(df,id=c("score1","score2"))
+  names(df.l)<-c(g1,g2,"rank","country")  
+  g<-ggplot(df.l,aes(x=jitter(df.l[,1],amount=0.1),y=jitter(df.l[,2],amount=0.1),colour=country))+
+    geom_point(size=2,alpha=0.7)+
+    facet_grid(rank~.)+
+    xlab(g1)+
+    ylab(g2)+
+    theme_bw()
+  return(g)
+}
+
+
 ### Examples:
+groupGames<-buildgroups(1)
 #getsummary("A")
 getsummary("G")
-possible(c(1,1))
+#possible(c(1,1))
+ggsave(filename=paste(getwd(),"/groupGplot.png",sep=""),plot=plotpossible(simul))
 
 # Pulling data from world cup API. Need to figure out 
 # how to put NAs into games that aren't finished yet
 json_file<-"http://worldcup.sfg.io/matches"
 json_data<-fromJSON(file=json_file)
 game1<-subset(do.call("rbind.fill",lapply(json_data[[1]],as.data.frame)),country!="<NA>",select=c(country,code,goals))
-
-
 
