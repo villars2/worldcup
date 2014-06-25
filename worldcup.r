@@ -324,7 +324,9 @@ getcurrent <- function(curr) {
 ### Examples:
 groupGames<-buildgroups(1)
 #getsummary("A")
-getsummary("G")
+#getsummary("G")
 #possible(c(1,1))
-ggsave(filename=paste(getwd(),"/groupEplot.png",sep=""),plot=plotpossible(simul),width=10,height=7)
+getsummary("E")
+plotcurrent(getcurrent(currentscore))
+ggsave(filename=paste(getwd(),"/groupEplot.png",sep=""),plot=plotcurrent(getcurrent(currentscore)),width=10,height=7)
 
