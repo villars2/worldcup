@@ -141,3 +141,6 @@ possible(c(1,1))
 json_file<-"http://worldcup.sfg.io/matches"
 json_data<-fromJSON(file=json_file)
 game1<-subset(do.call("rbind.fill",lapply(json_data[[1]],as.data.frame)),country!="<NA>",select=c(country,code,goals))
+
+
+
