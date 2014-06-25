@@ -129,6 +129,10 @@ gothru<-function(grp) {
   rankings<-merge(rankings,buildtiebreak(rankings))
   rankings<-rankings[order(rankings$points,rankings$gd,rankings$gf,-rankings$brk,decreasing=TRUE),]
   thru<-rankings$country[1:2]
+  ### When considering complete ties, rank using 
+  ### order<-5-rank(paste(as.character(rnk$points),as.character(rnk$gd),as.character(rnk$gf),as.character(rnk$rnk)),ties.method="max")
+  ### Then, if more than one 1, name all ones the same (ARGxBRAxFRA,etc)
+  ### If more than one 2, name one as first, and name all 2s the same (ARGxBRA, etc)
   return(thru)
 }
 
@@ -239,7 +243,7 @@ plotpossible <- function(df) {
   names(df.l)<-c(g1,g2,"rank","country")  
   g<-ggplot(df.l,aes(x=jitter(df.l[,1],amount=0.1),y=jitter(df.l[,2],amount=0.1),colour=country))+
     geom_point(size=2,alpha=0.7)+
-    facet_grid(rank~.)+
+    facet_grid(.~rank)+
     xlab(g1)+
     ylab(g2)+
     theme_bw()
@@ -252,7 +256,7 @@ groupGames<-buildgroups(1)
 #getsummary("A")
 getsummary("G")
 #possible(c(1,1))
-ggsave(filename=paste(getwd(),"/groupGplot.png",sep=""),plot=plotpossible(simul))
+ggsave(filename=paste(getwd(),"/groupEplot.png",sep=""),plot=plotpossible(simul),width=10,height=7)
 
 # Pulling data from world cup API. Need to figure out 
 # how to put NAs into games that aren't finished yet
