@@ -23,14 +23,15 @@ buildgroups <- function (save=1,filename="groupPull") {
     pullGame <- function(g_data) {
       g<-subset(subset(do.call("rbind.fill",lapply(g_data,as.data.frame)),country!="<NA>",select=c(country,code,goals)))
       g$g_id<-g_data[[1]]
-      if (g_data[[4]]!="completed") {
+      if (g_data[[4]]=="future") {
         g$goals<-c(NA,NA)
       }
+      g$curr<-rep((g_data[[4]]=="in progress"),2)
       return(g)
     }
     
     groupGames<-do.call("rbind.fill",lapply(lapply(json_data[1:48],pullGame),as.data.frame))
-    names(groupGames)<-c("country","fifa_code","goals","game")
+    names(groupGames)<-c("country","fifa_code","goals","game","curr")
     
     teams_file<-"http://worldcup.sfg.io/teams"
     teams_data<-fromJSON(file=teams_file)
@@ -43,7 +44,8 @@ buildgroups <- function (save=1,filename="groupPull") {
     teamsMaster<-subset(teamsMaster,select=c(country,fifa_code,group))
     
     groupGames<-merge(groupGames,teamsMaster)
-    groupGames<-groupGames[order(groupGames$group,groupGames$game,groupGames$country),]
+    groupGames<-groupGames[order(groupGames$group,groupGames$game),]
+    currentscore<<-as.numeric(subset(groupGames,curr)$goals)
   }
   
   if (save==2) {
@@ -58,14 +60,15 @@ buildgroups <- function (save=1,filename="groupPull") {
 }
 
 ### Function to break ties
-buildtiebreak <- function(rnk) {
+buildtiebreak <- function(rnk,g) {
   group<-rnk
   group<-group[order(group$points,group$gd,group$gf,decreasing=TRUE),]
   group$dup<-duplicated(subset(group,select=-c(country)),fromLast=TRUE)
   check<-as.numeric(subset(group,dup==TRUE,select=c(points,gd,gf))[1,])
   group$dups<-apply(as.matrix(subset(group,selec=c(points,gd,gf))),1,function(x) {identical(as.numeric(x),check)})
   tied<-group$country[group$dups]
-  games<-grp
+  nottied<-group$country[!group$dups]
+  games<-g
   games$tie<-as.factor(games$country) %in% tied
   
   #agg<-aggregate(games,)
@@ -77,13 +80,15 @@ buildtiebreak <- function(rnk) {
   tiedgroup<-subset(games,tiedgames==1,select=c(game,country,fifa_code,goals,group))
   
   tiedgroup$teamingame<-rep(c(1,2),length(tiedgroup[,1])/2)
-  tiebreak<-subset(rnk,select=country)
+  tiebreak<-subset(group,select=country)
   tiebreak$brk<-rep(1,4)
   
   if (length(tiedgroup[,1])>0) {
     tiebreak<-buildrankings(tiedgroup)
     tiebreak$brk<-(1:length(tiedgroup[,1]))
-    tiebreak<-subset(tiebreak,select=c(country,brk))             
+    tiebreak<-subset(tiebreak,select=c(country,brk))
+    remaining<-data.frame(country=nottied,brk=1)
+    tiebreak<-rbind(tiebreak,remaining)
   }
   return(tiebreak)
 }
@@ -126,7 +131,7 @@ gothru<-function(grp) {
 #   rankings<-ddply(grp.all,"country",summarize,points=sum(pts,na.rm=TRUE),gd=sum(gd,na.rm=TRUE),gf=sum(goals,na.rm=TRUE))
 #   rankings<-rankings[order(rankings$points,rankings$gd,rankings$gf,decreasing=TRUE),]
   rankings<-buildrankings(grp)
-  rankings<-merge(rankings,buildtiebreak(rankings))
+  rankings<-merge(rankings,buildtiebreak(rankings,grp))
   rankings<-rankings[order(rankings$points,rankings$gd,rankings$gf,-rankings$brk,decreasing=TRUE),]
   thru<-rankings$country[1:2]
   ### When considering complete ties, rank using 
@@ -139,7 +144,8 @@ gothru<-function(grp) {
 ### Function to replace NA scores by simulated scores, and get top 2 teams
 simulate <- function (scores) {
   grp<-group
-  grp$goals[is.na(grp$goals)]<-scores
+  # Change this to allow for current games
+  grp$goals[is.na(grp$goals) | grp$curr]<-scores
   return(gothru(grp))
 }
 
@@ -169,10 +175,10 @@ getsummary <- function (gr) {
   ### Simulate given all scores with between 0 and 5 goals. 
   #group<-group
   # Here we could automatically make the simulation grid using, but would get big (1.7E6) rows
-  gamesleft<-nrow(subset(group,is.na(goals)))
+  gamesleft<-nrow(subset(group,is.na(goals) | curr))
   simulation<-expand.grid(as.data.frame(matrix(rep(0:5,gamesleft),ncol=gamesleft)))
   # simulation<-expand.grid(g1=c(0:5),g2=c(0:5),g3=c(0:5),g4=c(0:5))
-  names(simulation)<-as.character(paste("g",subset(group,is.na(goals))$country,sep=""))
+  names(simulation)<-as.character(paste("g",subset(group,is.na(goals) | curr)$country,sep=""))
   results<-apply(simulation,1,simulate)
   simulation$first<-as.factor(results[1,])
   simulation$second<-as.factor(results[2,])
@@ -203,7 +209,7 @@ getsummary <- function (gr) {
   summary$score2[summary$score2==0]<-"T"
   summary$score2[summary$score2==1]<-"W"
   
-  remaininggames<-subset(group,is.na(goals))
+  remaininggames<-subset(group,is.na(goals) | curr)
   summary$score1<-paste(remaininggames$country[1],
                         summary$score1,
                         remaininggames$country[2],
@@ -233,7 +239,8 @@ possible <- function (outcomes) {
 }
 
 ### Plot outcomes given scores:
-plotpossible <- function(df) {
+plotpossible <- function(dframe) {
+  df<-dframe
   df$score1<-df[,1]-df[,2]
   df$score2<-df[,3]-df[,4]
   g1<-paste(names(df)[1],names(df)[2],sep="-")
@@ -245,22 +252,81 @@ plotpossible <- function(df) {
     geom_point(size=2,alpha=0.7)+
     facet_grid(.~rank)+
     xlab(g1)+
+    scale_x_continuous(breaks=c(-4,-2,0,2,4))+
     ylab(g2)+
+    scale_y_continuous(breaks=c(-4,-2,0,2,4))+
     theme_bw()
   return(g)
 }
+
+plotcurrent <- function(dframe) {
+  df<-dframe
+  df$score1<-df[,1]-df[,2]
+  df$score2<-df[,3]-df[,4]
+  g1<-paste(names(df)[1],names(df)[2],sep="-")
+  g2<-paste(names(df)[3],names(df)[4],sep="-")
+  df<-subset(df,select=c(first,second,score1,score2,current))
+  df.l<<-melt(df,id=c("score1","score2","current"))
+  names(df.l)<-c(g1,g2,"current","rank","country")  
+  shape<-c(16,1)
+  size<-c(2,10)
+  df.l$x<-jitter(df.l[,1],amount=0.1)
+  df.l[df.l$current,6]<-as.numeric(subset(df.l,current)[,1])
+  df.l$y<-jitter(df.l[,2],amount=0.1)
+  df.l[df.l$current,7]<-as.numeric(subset(df.l,current)[,2])
+  title1<-paste(subset(groupGames,curr)$country,currentscore)[1:2]
+  title2<-paste(subset(groupGames,curr)$country,currentscore)[3:4]
+  titl<-paste(paste(title1,collapse="/"),paste(title2,collapse="/"),sep=" & ")
+  g<-ggplot(df.l,aes(x=x,y=y,
+                     colour=country,
+                     shape=current,
+                     size=current))+
+    geom_point(alpha=0.7)+
+    scale_shape_manual(values=shape)+
+    scale_size_manual(values=size)+
+    facet_grid(.~rank)+
+    xlab(g1)+
+    scale_x_continuous(breaks=c(-4,-2,0,2,4))+
+    ylab(g2)+
+    scale_y_continuous(breaks=c(-4,-2,0,2,4))+
+    theme_bw()+
+    ggtitle(titl)
+  return(g)
+}
+
+###Left to do: 
+##Get current scores
+# Status of game is "in progress"
+# Could build variable when building groups on whether it's in progress,
+# Then can allow simulations for those games but pick the scores into currentscore
+# getcurrent <- function() {
+#   
+# }
+##Subset only possible scores given current score
+#currentscore<-getcurrent()
+iscurrent<- function(x) {
+  identical(curscore,as.numeric(x))
+}
+ispossible<-function(x) {
+  min(as.numeric(x)-curscore)>=0
+}
+getcurrent <- function(curr) {
+  curscore<<-curr
+  simulsmaller<-simul
+  simulsmaller$current<-apply(subset(simulsmaller,select=-c(first,second,score1,score2)),1,iscurrent)
+  simulsmaller$can    <-apply(subset(simulsmaller,select=-c(first,second,score1,score2,current)),1,ispossible)
+  return(subset(simulsmaller,can,select=-c(can)))
+}
+##Find a way to properly display current scores
+##Find and tag drawing lots scenarios (color=grey)
 
 
 ### Examples:
 groupGames<-buildgroups(1)
 #getsummary("A")
-getsummary("G")
+#getsummary("G")
 #possible(c(1,1))
-ggsave(filename=paste(getwd(),"/groupEplot.png",sep=""),plot=plotpossible(simul),width=10,height=7)
-
-# Pulling data from world cup API. Need to figure out 
-# how to put NAs into games that aren't finished yet
-json_file<-"http://worldcup.sfg.io/matches"
-json_data<-fromJSON(file=json_file)
-game1<-subset(do.call("rbind.fill",lapply(json_data[[1]],as.data.frame)),country!="<NA>",select=c(country,code,goals))
+getsummary("E")
+plotcurrent(getcurrent(currentscore))
+ggsave(filename=paste(getwd(),"/groupEplot.png",sep=""),plot=plotcurrent(getcurrent(currentscore)),width=10,height=7)
 
