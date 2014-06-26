@@ -75,7 +75,7 @@ shinyServer(function(input, output) {
     }
     
     ### Function to break ties
-    buildtiebreak <- function(rnk) {
+    buildtiebreak <- function(rnk,grp) {
       group<-rnk
       group<-group[order(group$points,group$gd,group$gf,decreasing=TRUE),]
       group$dup<-duplicated(subset(group,select=-c(country)),fromLast=TRUE)
@@ -143,7 +143,7 @@ shinyServer(function(input, output) {
       #   rankings<-ddply(grp.all,"country",summarize,points=sum(pts,na.rm=TRUE),gd=sum(gd,na.rm=TRUE),gf=sum(goals,na.rm=TRUE))
       #   rankings<-rankings[order(rankings$points,rankings$gd,rankings$gf,decreasing=TRUE),]
       rankings<-buildrankings(grp)
-      rankings<-merge(rankings,buildtiebreak(rankings))
+      rankings<-merge(rankings,buildtiebreak(rankings,grp))
       rankings<-rankings[order(rankings$points,rankings$gd,rankings$gf,-rankings$brk,decreasing=TRUE),]
       thru<-rankings$country[1:2]
       ### When considering complete ties, rank using 
